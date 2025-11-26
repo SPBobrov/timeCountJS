@@ -1,63 +1,133 @@
-activity = [{text: 'работа', image: 'https://img.icons8.com/?size=100&id=vDnUS6DqDutj&format=png&color=000000', description: 'Пилите, Шура, пилите!', id: 'work'},
-    {text: 'кодинг', image: 'https://img.icons8.com/?size=100&id=zlzd62YNn3Gj&format=png&color=000000', description: 'Пишите, Шура, пишите!', id: 'coding'}
+// Конфигурация активностей
+const activities = [
+    {
+        text: 'работа',
+        image: 'https://img.icons8.com/?size=100&id=vDnUS6DqDutj&format=png&color=000000',
+        description: 'Пилите, Шура, пилите!',
+        id: 'work'
+    },
+    {
+        text: 'кодинг',
+        image: 'https://img.icons8.com/?size=100&id=zlzd62YNn3Gj&format=png&color=000000',
+        description: 'Пишите, Шура, пишите!',
+        id: 'coding'
+    }
 ];
 
-cardArr = ['#card-1', '#card-2'];
-/*let cardTitle = document.querySelector('.card-title');
-if(cardTitle.textContent.length > 8) {
-    cardTitle.textContent.style.fontSize = '8px';
-} else {
-    cardTitle.textContent.style.fontSize = '12px'
-}
-if(cardTitle.textContent.length == 6) {
-    console.log('jjkl');
-}*/
+// Селекторы карточек
+const cardSelectors = ['#card-1', '#card-2'];
 
-for(let i = 0; i <= 1; i = i + 1) {                     //здесь нужно будет поставить размер массива в качестве i
+// Хранилище данных о времени
+const timeLog = [];
+const timeLogStamp = [];
+
+/**
+ * Определяет размер шрифта на основе длины текста
+ * @param {string} text - Текст для проверки
+ * @returns {string} - Размер шрифта в пикселях
+ */
+function getFontSizeByTextLength(text) {
+    return text.length >= 8 ? '8px' : '14px';
+}
+
+/**
+ * Создает элемент изображения для активности
+ * @param {Object} activity - Объект активности
+ * @returns {HTMLImageElement} - Элемент изображения
+ */
+function createActivityImage(activity) {
     const img = document.createElement('img');
-    img.src = activity[i].image;
-    img.alt = activity[i].description;
-    img.id = activity[i].id;
-    const container = document.querySelector(cardArr[i]);
-    img.className += ' card-image'; 
-
-   
-    
-    container.append(img);
-    const h3 = document.createElement('h3');
-    h3.textContent = activity[i].text;
-    if(h3.textContent.length >= 8) {
-        h3.style.fontSize = '8px';
-    } else {
-        h3.style.fontSize = '14px';
-    }
-    const containerText = document.querySelector(cardArr[i]);
-    h3.className += ' title-in-card';
-    container.append(h3);    
-
-       
+    img.src = activity.image;
+    img.alt = activity.description;
+    img.id = activity.id;
+    img.className = 'card-image';
+    return img;
 }
 
-var timeLog = []; //глобальная переменная определенная вне функции, позволила собирать значения в массив
-                  //когда timeLog была в функции массив все всемя состоял из одного значения
-var timeLogStamp = [];
+/**
+ * Создает заголовок для активности
+ * @param {Object} activity - Объект активности
+ * @returns {HTMLHeadingElement} - Элемент заголовка
+ */
+function createActivityTitle(activity) {
+    const h3 = document.createElement('h3');
+    h3.textContent = activity.text;
+    h3.style.fontSize = getFontSizeByTextLength(activity.text);
+    h3.className = 'title-in-card';
+    return h3;
+}
 
-document.getElementById('work').onclick = function() {
-        let timePoint = new Date();
+/**
+ * Инициализирует карточку активности
+ * @param {Object} activity - Объект активности
+ * @param {string} cardSelector - Селектор карточки
+ */
+function initializeActivityCard(activity, cardSelector) {
+    const container = document.querySelector(cardSelector);
+    if (!container) {
+        console.warn(`Карточка не найдена: ${cardSelector}`);
+        return;
+    }
+
+    const img = createActivityImage(activity);
+    const title = createActivityTitle(activity);
+
+    container.append(img, title);
+}
+
+/**
+ * Обработчик клика по активности для учета времени
+ * @param {string} activityId - ID активности
+ */
+function createTimeLogHandler(activityId) {
+    return function() {
+        const timePoint = new Date();
         timeLog.push(timePoint);
         timeLogStamp.push(timePoint.getTime());
-        console.log(timeLog);
-        console.log(timeLogStamp);
-        return timeLog;
- };
+        console.log('Лог времени:', timeLog);
+        console.log('Метки времени:', timeLogStamp);
+    };
+}
 
- function logForDay() {
-    console.log(timeLogStamp); //функция вывода данных за день
- }
+/**
+ * Инициализирует обработчики событий для всех активностей
+ */
+function initializeActivityHandlers() {
+    activities.forEach(activity => {
+        const element = document.getElementById(activity.id);
+        if (element) {
+            element.addEventListener('click', createTimeLogHandler(activity.id));
+        } else {
+            console.warn(`Элемент активности не найден: ${activity.id}`);
+        }
+    });
+}
 
- //планирую перенести функцию присваивания учета времени кнопке активности в цикл создания активностей
-// пока не получается закинуть в репозиторий
+/**
+ * Выводит данные за день
+ */
+function logForDay() {
+    console.log('Данные за день:', timeLogStamp);
+}
 
- 
+/**
+ * Инициализация приложения
+ */
+function init() {
+    // Создание карточек активностей
+    activities.forEach((activity, index) => {
+        if (cardSelectors[index]) {
+            initializeActivityCard(activity, cardSelectors[index]);
+        }
+    });
 
- 
+    // Инициализация обработчиков событий
+    initializeActivityHandlers();
+}
+
+// Запуск приложения после загрузки DOM
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
