@@ -1,0 +1,93 @@
+body,
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+  font-weight: normal;
+  font-size: 100%;
+}
+
+.quote {
+    margin-top: 5px;
+    margin-right: 20px;
+    margin-left: 20px;
+    background-color: aquamarine;
+    text-transform: uppercase;
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+    font-size: 18px;
+}
+
+.content {
+  margin-right: 20px;
+  margin-left: 20px;
+}
+
+.title {
+    margin-top: 5px;
+    margin-right: 20px;
+    margin-left: 20px;
+    background-color: aquamarine;
+    text-transform: uppercase;
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: 900;
+    font-size: 74px;
+}
+
+.card {
+  display: inline-block;
+  margin-top: 5px;
+  
+  /*border: 1px solid black;*/
+  /*background-color: aquamarine;*/
+ 
+}
+
+.card-image {
+  border: 1px solid black;
+}
+
+.title-in-card {
+  margin-top: 1px;
+  border: 1px solid black;
+  text-align: center;
+  font-family: Verdana, Geneva, Tahoma, sans-serif;
+  text-transform: uppercase;
+}
+
+.buttonpanel {
+    margin-top: 5px;
+    margin-right: 20px;
+    margin-left: 20px;
+    background-color: aquamarine;
+    text-transform: uppercase;
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+    font-size: 18px;
+}
+
+#outer
+{
+    width:100%;
+    text-align: center;
+}
+.inner
+{
+    display: inline-block;
+}
+
+.footer {
+  margin-top: 5px;
+  margin-right: 20px;
+  margin-left: 20px;
+  display: flex;
+  height: 200px;
+  background-color: #5f0dee;
+}
+
+.footer-author {
+  margin: auto;
+  color: white;
+  font-weight: 800;
+  font-size: 25px;
+}
