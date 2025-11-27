@@ -41,11 +41,25 @@ p {
   
   /*border: 1px solid black;*/
   /*background-color: aquamarine;*/
- 
+}
+
+.card.active .title-in-card {
+  background-color: rgba(95, 13, 238, 0.2);
+  border: 2px solid #5f0dee;
+  font-weight: bold;
 }
 
 .card-image {
   border: 1px solid black;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.card-image.active {
+  border: 3px solid #5f0dee;
+  box-shadow: inset 0 0 10px rgba(95, 13, 238, 0.5);
+  background-color: rgba(95, 13, 238, 0.1);
+  transform: scale(0.95);
 }
 
 .title-in-card {
@@ -76,6 +90,106 @@ p {
     display: inline-block;
 }
 
+.stats-panel {
+  margin-top: 5px;
+  margin-right: 20px;
+  margin-left: 20px;
+  background-color: #f0f0f0;
+  border: 2px solid #5f0dee;
+  border-radius: 8px;
+  padding: 15px;
+  max-height: 70vh;
+  overflow-y: auto;
+  font-family: Verdana, Geneva, Tahoma, sans-serif;
+}
+
+.stats-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #5f0dee;
+}
+
+.stats-panel-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: bold;
+  color: #5f0dee;
+  text-transform: uppercase;
+}
+
+.stats-panel-close {
+  background-color: #5f0dee;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background-color 0.3s ease;
+}
+
+.stats-panel-close:hover {
+  background-color: #4a0bb8;
+}
+
+.stats-panel-content {
+  color: #333;
+}
+
+.stats-total {
+  background-color: #5f0dee;
+  color: white;
+  padding: 15px;
+  border-radius: 5px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.stats-total h4 {
+  margin: 0 0 10px 0;
+  font-size: 18px;
+  text-transform: uppercase;
+}
+
+.stats-total p {
+  margin: 5px 0;
+  font-size: 16px;
+}
+
+.stats-activities-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.stats-activity-item {
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 12px 20px;
+  font-size: 16px;
+  color: #333;
+  flex: 1 1 auto;
+  min-width: 200px;
+  text-align: center;
+}
+
+.stats-empty {
+  text-align: center;
+  padding: 20px;
+  color: #999;
+  font-style: italic;
+}
+
 .footer {
   margin-top: 5px;
   margin-right: 20px;
@@ -83,6 +197,11 @@ p {
   display: flex;
   height: 200px;
   background-color: #5f0dee;
+  transition: height 0.3s ease, margin-top 0.3s ease;
+}
+
+.footer.compressed {
+  height: 100px;
 }
 
 .footer-author {

@@ -79,17 +79,35 @@ try {
     
     $pdo->commit();
     
-    echo json_encode([
-        'success' => true,
-        'saved' => $saved,
-        'total' => count($input['sessions']),
-        'errors' => $errors
-    ], JSON_UNESCAPED_UNICODE);
+    if ($saved === 0 && !empty($errors)) {
+        // Если ничего не сохранено и есть ошибки - возвращаем ошибку
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'error' => 'Не удалось сохранить ни одной сессии',
+            'saved' => 0,
+            'total' => count($input['sessions']),
+            'errors' => $errors
+        ], JSON_UNESCAPED_UNICODE);
+    } else {
+        // Возвращаем результат (может быть частичный успех)
+        echo json_encode([
+            'success' => true,
+            'saved' => $saved,
+            'total' => count($input['sessions']),
+            'errors' => $errors
+        ], JSON_UNESCAPED_UNICODE);
+    }
     
 } catch (Exception $e) {
-    $pdo->rollBack();
+    if (isset($pdo)) {
+        $pdo->rollBack();
+    }
     error_log("Ошибка массового сохранения: " . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => 'Ошибка сохранения данных']);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Ошибка сохранения данных: ' . $e->getMessage()
+    ], JSON_UNESCAPED_UNICODE);
 }
 

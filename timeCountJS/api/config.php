@@ -11,6 +11,27 @@ define('DB_PASS', '');
 define('DB_CHARSET', 'utf8mb4');
 
 /**
+ * Создает подключение к MySQL без указания базы данных
+ * @return PDO|null
+ */
+function getMySQLConnection() {
+    try {
+        $dsn = "mysql:host=" . DB_HOST . ";charset=" . DB_CHARSET;
+        $options = [
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES   => false,
+        ];
+        
+        $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+        return $pdo;
+    } catch (PDOException $e) {
+        error_log("Ошибка подключения к MySQL: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
  * Создает подключение к базе данных
  * @return PDO|null
  */
@@ -26,21 +47,41 @@ function getDBConnection() {
         $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
         return $pdo;
     } catch (PDOException $e) {
+        // Если база данных не существует, пытаемся создать её
+        if ($e->getCode() == 1049) {
+            if (initDatabase()) {
+                // Повторная попытка подключения после создания БД
+                return getDBConnection();
+            }
+        }
         error_log("Ошибка подключения к БД: " . $e->getMessage());
         return null;
     }
 }
 
 /**
- * Инициализирует базу данных (создает таблицы, если их нет)
+ * Инициализирует базу данных (создает базу и таблицы, если их нет)
  */
 function initDatabase() {
-    $pdo = getDBConnection();
-    if (!$pdo) {
+    $mysql = getMySQLConnection();
+    if (!$mysql) {
         return false;
     }
     
     try {
+        // Создание базы данных, если её нет
+        $mysql->exec("CREATE DATABASE IF NOT EXISTS " . DB_NAME . " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        
+        // Подключение к созданной базе данных напрямую (без рекурсии)
+        $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET;
+        $options = [
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES   => false,
+        ];
+        
+        $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+        
         // Создание таблицы активностей
         $pdo->exec("CREATE TABLE IF NOT EXISTS activities (
             id INT AUTO_INCREMENT PRIMARY KEY,

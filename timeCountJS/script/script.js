@@ -1,3 +1,10 @@
+// Определяем базовый URL для API
+// Если страница открыта через XAMPP (localhost), используем относительный путь
+// Если через Live Server или другой сервер, может потребоваться абсолютный путь
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+    ? '' // Относительный путь для XAMPP
+    : '/timeCountJS'; // Абсолютный путь для других серверов
+
 // Конфигурация активностей
 const activities = [
     {
@@ -29,7 +36,19 @@ const activities = [
 // Селекторы карточек
 const cardSelectors = ['#card-1', '#card-2', '#card-3', '#card-4'];
 
-// Хранилище данных о времени
+// Хранилище данных о времени.
+// Структура: объект, где ключ — это идентификатор активности (например, "work", "coding"), 
+// а значение — массив записей об одном или нескольких периодах занятия этой активностью.
+// Пример:
+// {
+//   work: [ { start: Date, end: Date, durationMinutes: number }, ... ],
+//   coding: [ { start: Date, end: Date, durationMinutes: number }, ... ],
+//   ...
+// }
+// Каждая запись периодa — это объект, где:
+//   start — дата и время начала,
+//   end — дата и время окончания,
+//   durationMinutes — продолжительность в минутах.
 // Структура: { activityId: [{ start: Date, end: Date, durationMinutes: number }, ...] }
 const activitySessions = {};
 
@@ -136,7 +155,7 @@ async function saveSessionToServer(session) {
     
     try {
         const startTime = Date.now();
-        const response = await fetch('api/save_session.php', {
+        const response = await fetch(`${API_BASE_URL}/api/save_session.php`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -145,7 +164,59 @@ async function saveSessionToServer(session) {
         });
         
         const responseTime = Date.now() - startTime;
-        const result = await response.json();
+        
+        // Проверяем статус ответа
+        if (!response.ok) {
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            
+            // Пытаемся получить текст ошибки (клонируем ответ для чтения)
+            try {
+                const responseClone = response.clone();
+                const contentType = response.headers.get('content-type');
+                
+                if (contentType && contentType.includes('application/json')) {
+                    const errorResult = await responseClone.json();
+                    if (errorResult.error) {
+                        errorMessage = errorResult.error;
+                    }
+                } else {
+                    // Если не JSON, пытаемся прочитать как текст
+                    const textResponse = response.clone();
+                    const text = await textResponse.text();
+                    if (text && text.trim().length > 0) {
+                        errorMessage = text.substring(0, 200);
+                    }
+                }
+            } catch (e) {
+                // Если не удалось прочитать ответ, используем стандартное сообщение
+                console.warn('Не удалось прочитать тело ответа:', e.message);
+            }
+            
+            console.error('❌ ОШИБКА ТРАНЗАКЦИИ');
+            console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.error('📊 Ответ сервера:');
+            console.error('   • Статус:', response.status, response.statusText);
+            console.error('   • Ошибка:', errorMessage);
+            console.error('   • Время ответа:', responseTime + 'мс');
+            console.error('   • Данные сохранены локально для последующей синхронизации');
+            console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+            
+            // Сохраняем в локальное хранилище при любой ошибке
+            saveToLocalStorage(session);
+            return false;
+        }
+        
+        // Пытаемся получить JSON ответ
+        let result;
+        try {
+            result = await response.json();
+        } catch (e) {
+            console.error('❌ ОШИБКА ПАРСИНГА ОТВЕТА');
+            console.error('   • Ответ не является валидным JSON');
+            console.error('   • Данные сохранены локально для последующей синхронизации');
+            saveToLocalStorage(session);
+            return false;
+        }
         
         if (result.success) {
             console.log('✅ ТРАНЗАКЦИЯ УСПЕШНА');
@@ -162,9 +233,13 @@ async function saveSessionToServer(session) {
             console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             console.error('📊 Ответ сервера:');
             console.error('   • Статус:', response.status, response.statusText);
-            console.error('   • Ошибка:', result.error);
+            console.error('   • Ошибка:', result.error || 'Неизвестная ошибка');
             console.error('   • Время ответа:', responseTime + 'мс');
+            console.error('   • Данные сохранены локально для последующей синхронизации');
             console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+            
+            // Сохраняем в локальное хранилище при ошибке
+            saveToLocalStorage(session);
             return false;
         }
     } catch (error) {
@@ -198,12 +273,21 @@ function saveToLocalStorage(session) {
 
 /**
  * Синхронизирует несохраненные сессии с сервером
+ * @returns {Promise<Object>} Результат синхронизации
  */
 async function syncPendingSessions() {
     try {
         const pending = JSON.parse(localStorage.getItem('pending_sessions') || '[]');
         if (pending.length === 0) {
-            return;
+            return {
+                success: true,
+                hasPending: false,
+                message: 'Нет несохраненных сессий',
+                pendingCount: 0,
+                sent: 0,
+                saved: 0,
+                errors: []
+            };
         }
         
         console.log('\n🔄 СИНХРОНИЗАЦИЯ НЕСОХРАНЕННЫХ СЕССИЙ');
@@ -226,16 +310,59 @@ async function syncPendingSessions() {
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         
         const startTime = Date.now();
-        const response = await fetch('api/save_multiple_sessions.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ sessions })
-        });
+        let response;
+        try {
+            response = await fetch(`${API_BASE_URL}/api/save_multiple_sessions.php`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ sessions })
+            });
+        } catch (networkError) {
+            // Ошибка сети (сервер недоступен)
+            throw new Error(`Ошибка сети: ${networkError.message}`);
+        }
         
         const responseTime = Date.now() - startTime;
-        const result = await response.json();
+        
+        // Проверяем статус ответа
+        if (!response.ok) {
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            
+            // Пытаемся получить текст ошибки (клонируем ответ для чтения)
+            try {
+                const responseClone = response.clone();
+                const contentType = response.headers.get('content-type');
+                
+                if (contentType && contentType.includes('application/json')) {
+                    const errorResult = await responseClone.json();
+                    if (errorResult.error) {
+                        errorMessage = errorResult.error;
+                    }
+                } else {
+                    // Если не JSON, пытаемся прочитать как текст
+                    const textResponse = response.clone();
+                    const text = await textResponse.text();
+                    if (text && text.trim().length > 0) {
+                        errorMessage = text.substring(0, 200);
+                    }
+                }
+            } catch (e) {
+                // Если не удалось прочитать ответ, используем стандартное сообщение
+                console.warn('Не удалось прочитать тело ответа:', e.message);
+            }
+            
+            throw new Error(errorMessage);
+        }
+        
+        // Пытаемся получить JSON ответ
+        let result;
+        try {
+            result = await response.json();
+        } catch (e) {
+            throw new Error('Ответ сервера не является валидным JSON');
+        }
         
         if (result.success && result.saved === pending.length) {
             localStorage.removeItem('pending_sessions');
@@ -247,7 +374,19 @@ async function syncPendingSessions() {
             console.log('   • Время ответа:', responseTime + 'мс');
             console.log('   • Локальное хранилище очищено');
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-        } else {
+            
+            return {
+                success: true,
+                hasPending: true,
+                message: 'Синхронизация успешно завершена',
+                pendingCount: pending.length,
+                sent: result.total || pending.length,
+                saved: result.saved || pending.length,
+                responseTime: responseTime,
+                errors: []
+            };
+        } else if (result.success) {
+            // Частичная синхронизация - некоторые сессии сохранены
             console.warn('⚠️  ЧАСТИЧНАЯ СИНХРОНИЗАЦИЯ');
             console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             console.warn('📊 Результат:');
@@ -256,6 +395,25 @@ async function syncPendingSessions() {
             console.warn('   • Ошибки:', result.errors || []);
             console.warn('   • Время ответа:', responseTime + 'мс');
             console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+            
+            // Удаляем успешно сохраненные сессии из localStorage
+            // ВАЖНО: Мы не можем точно определить, какие именно сессии были сохранены,
+            // поэтому оставляем все сессии в localStorage для повторной попытки
+            // Это безопаснее, чем потерять данные
+            
+            return {
+                success: false,
+                hasPending: true,
+                message: 'Частичная синхронизация',
+                pendingCount: pending.length,
+                sent: result.total || 0,
+                saved: result.saved || 0,
+                responseTime: responseTime,
+                errors: result.errors || []
+            };
+        } else {
+            // Полная ошибка
+            throw new Error(result.error || 'Неизвестная ошибка синхронизации');
         }
     } catch (error) {
         console.error('❌ ОШИБКА СИНХРОНИЗАЦИИ');
@@ -265,6 +423,18 @@ async function syncPendingSessions() {
         console.error('   • Сообщение:', error.message);
         console.error('   • Сессии остались в локальном хранилище');
         console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        
+        const pending = JSON.parse(localStorage.getItem('pending_sessions') || '[]');
+        return {
+            success: false,
+            hasPending: pending.length > 0,
+            message: 'Ошибка синхронизации',
+            pendingCount: pending.length,
+            sent: 0,
+            saved: 0,
+            errors: [error.message],
+            errorType: error.name
+        };
     }
 }
 
@@ -304,6 +474,9 @@ async function finishActivity(activityId, endTime) {
         // Удаляем из активных
         delete activeActivities[activityId];
         
+        // Обновляем визуальное состояние
+        updateActivityVisualState(activityId, false);
+        
         console.log(`Завершена активность "${activityName}": ${duration} минут`);
     }
 }
@@ -319,6 +492,30 @@ async function finishAllActivities(endTime) {
 }
 
 /**
+ * Обновляет визуальное состояние активности (активна/неактивна)
+ * @param {string} activityId - ID активности
+ * @param {boolean} isActive - Активна ли активность
+ */
+function updateActivityVisualState(activityId, isActive) {
+    const element = document.getElementById(activityId);
+    const card = element ? element.closest('.card') : null;
+    
+    if (element) {
+        if (isActive) {
+            element.classList.add('active');
+            if (card) {
+                card.classList.add('active');
+            }
+        } else {
+            element.classList.remove('active');
+            if (card) {
+                card.classList.remove('active');
+            }
+        }
+    }
+}
+
+/**
  * Обработчик клика по активности для учета времени
  * @param {string} activityId - ID активности
  */
@@ -330,12 +527,14 @@ function createTimeLogHandler(activityId) {
         if (activeActivities[activityId]) {
             // Если активность уже запущена - останавливаем её
             finishActivity(activityId, currentTime);
+            updateActivityVisualState(activityId, false);
             const activity = activities.find(a => a.id === activityId);
             const activityName = activity ? activity.text : activityId;
             console.log(`Активность "${activityName}" остановлена`);
         } else {
             // Если активность не запущена - начинаем её
             activeActivities[activityId] = currentTime;
+            updateActivityVisualState(activityId, true);
             const activity = activities.find(a => a.id === activityId);
             const activityName = activity ? activity.text : activityId;
             console.log(`Начата активность "${activityName}" в ${currentTime.toLocaleTimeString()}`);
@@ -421,6 +620,202 @@ async function getStatisticsFromServer(dateFrom = null, dateTo = null) {
 }
 
 /**
+ * Закрывает панель статистики и восстанавливает подвал
+ */
+function closeStatsPanel() {
+    const panel = document.getElementById('stats-panel');
+    const footer = document.getElementById('footer');
+    
+    if (panel) {
+        panel.style.display = 'none';
+    }
+    
+    if (footer) {
+        footer.classList.remove('compressed');
+    }
+}
+
+/**
+ * Открывает панель статистики и сжимает подвал
+ * @param {string} title - Заголовок панели
+ */
+function openStatsPanel(title = 'Данные за день') {
+    const panel = document.getElementById('stats-panel');
+    const panelHeader = panel ? panel.querySelector('.stats-panel-header h3') : null;
+    const footer = document.getElementById('footer');
+    
+    if (panel) {
+        panel.style.display = 'block';
+        if (panelHeader) {
+            panelHeader.textContent = title;
+        }
+    }
+    
+    if (footer) {
+        footer.classList.add('compressed');
+    }
+}
+
+/**
+ * Конвертирует минуты в формат "X часов Y минут"
+ * @param {number} totalMinutes - Общее количество минут
+ * @returns {string} - Отформатированная строка
+ */
+function formatTimeHoursMinutes(totalMinutes) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = Math.round(totalMinutes % 60);
+    
+    if (hours === 0) {
+        return `${minutes} минут`;
+    } else if (minutes === 0) {
+        return `${hours} часов`;
+    } else {
+        return `${hours} часов ${minutes} минут`;
+    }
+}
+
+/**
+ * Форматирует данные для отображения на панели
+ * @param {Object} serverStats - Данные с сервера или null
+ * @returns {string} - HTML содержимое панели
+ */
+function formatStatsForPanel(serverStats) {
+    let html = '';
+    
+    if (serverStats) {
+        // Данные с сервера
+        html += `<div class="stats-total">
+            <h4>📅 ${serverStats.period.date_from}</h4>
+        </div>`;
+        
+        if (serverStats.activities.length === 0) {
+            html += '<div class="stats-empty">Нет записей за этот день</div>';
+        } else {
+            html += '<div class="stats-activities-row">';
+            serverStats.activities.forEach(activity => {
+                const timeFormatted = formatTimeHoursMinutes(activity.total_minutes);
+                html += `<div class="stats-activity-item">${activity.activity_name}: ${timeFormatted}</div>`;
+            });
+            html += '</div>';
+        }
+    } else {
+        // Локальные данные
+        html += '<div class="stats-total"><h4>⚠️ Локальные данные</h4></div>';
+        
+        let hasData = false;
+        const activitiesData = [];
+        
+        activities.forEach(activity => {
+            const sessions = activitySessions[activity.id];
+            
+            if (!sessions || sessions.length === 0) {
+                return;
+            }
+            
+            hasData = true;
+            const totalTime = sessions.reduce((sum, session) => sum + session.durationMinutes, 0);
+            activitiesData.push({
+                name: activity.text,
+                minutes: totalTime
+            });
+        });
+        
+        if (hasData) {
+            html += '<div class="stats-activities-row">';
+            activitiesData.forEach(activity => {
+                const timeFormatted = formatTimeHoursMinutes(activity.minutes);
+                html += `<div class="stats-activity-item">${activity.name}: ${timeFormatted}</div>`;
+            });
+            html += '</div>';
+        } else {
+            html += '<div class="stats-empty">Нет записей за этот день</div>';
+        }
+    }
+    
+    return html;
+}
+
+/**
+ * Форматирует результаты синхронизации для отображения на панели
+ * @param {Object} syncResult - Результат синхронизации
+ * @returns {string} - HTML содержимое панели
+ */
+function formatSyncResultForPanel(syncResult) {
+    let html = '';
+    
+    if (!syncResult.hasPending) {
+        // Нет несохраненных сессий
+        html += `<div class="stats-total" style="background-color: #28a745;">
+            <h4>✅ ${syncResult.message}</h4>
+            <p>Все данные синхронизированы</p>
+        </div>`;
+    } else if (syncResult.success) {
+        // Успешная синхронизация
+        html += `<div class="stats-total" style="background-color: #28a745;">
+            <h4>✅ ${syncResult.message}</h4>
+            <p><strong>Отправлено сессий:</strong> ${syncResult.sent}</p>
+            <p><strong>Сохранено сессий:</strong> ${syncResult.saved}</p>
+            <p><strong>Время ответа:</strong> ${syncResult.responseTime}мс</p>
+        </div>`;
+    } else {
+        // Ошибка синхронизации
+        const bgColor = syncResult.saved > 0 ? '#ffc107' : '#dc3545';
+        html += `<div class="stats-total" style="background-color: ${bgColor};">
+            <h4>${syncResult.saved > 0 ? '⚠️' : '❌'} ${syncResult.message}</h4>
+            <p><strong>Несохраненных сессий:</strong> ${syncResult.pendingCount}</p>
+            <p><strong>Отправлено:</strong> ${syncResult.sent}</p>
+            <p><strong>Сохранено:</strong> ${syncResult.saved}</p>`;
+        
+        if (syncResult.responseTime) {
+            html += `<p><strong>Время ответа:</strong> ${syncResult.responseTime}мс</p>`;
+        }
+        
+        if (syncResult.errors && syncResult.errors.length > 0) {
+            html += `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.3);">`;
+            html += `<strong>Ошибки:</strong>`;
+            syncResult.errors.forEach((error, index) => {
+                html += `<p style="margin: 5px 0; font-size: 14px;">${index + 1}. ${error}</p>`;
+            });
+            html += `</div>`;
+        }
+        
+        if (syncResult.errorType) {
+            html += `<p style="margin-top: 5px; font-size: 14px;"><strong>Тип ошибки:</strong> ${syncResult.errorType}</p>`;
+        }
+        
+        html += `</div>`;
+    }
+    
+    return html;
+}
+
+/**
+ * Принудительная синхронизация с базой данных
+ */
+async function forceSync() {
+    console.log('\n🔄 ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    // Выполняем синхронизацию
+    const syncResult = await syncPendingSessions();
+    
+    // Форматируем результат для панели
+    const panelContent = document.getElementById('stats-panel-content');
+    if (panelContent) {
+        panelContent.innerHTML = formatSyncResultForPanel(syncResult);
+        openStatsPanel('Синхронизация');
+        
+        // Прокручиваем панель вверх
+        const panel = document.getElementById('stats-panel');
+        if (panel) {
+            panel.scrollTop = 0;
+        }
+    }
+    
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+}
+
+/**
  * Выводит данные за день по всем активностям
  */
 async function logForDay() {
@@ -445,8 +840,8 @@ async function logForDay() {
     const today = new Date().toISOString().split('T')[0];
     const serverStats = await getStatisticsFromServer(today, today);
     
+    // Выводим данные в консоль (для отладки)
     if (serverStats) {
-        // Выводим данные с сервера
         console.log(`\n📅 Период: ${serverStats.period.date_from}`);
         console.log(`\n⏱️  ОБЩЕЕ ВРЕМЯ ЗА ДЕНЬ: ${serverStats.total.minutes.toFixed(2)} минут (${serverStats.total.hours.toFixed(2)} часов)`);
         console.log(`📊 Всего сессий: ${serverStats.total.sessions}`);
@@ -469,7 +864,6 @@ async function logForDay() {
             });
         }
     } else {
-        // Если сервер недоступен, выводим локальные данные
         console.log('⚠️  Сервер недоступен, показываю локальные данные:');
         
         let totalTimeAll = 0;
@@ -501,6 +895,19 @@ async function logForDay() {
     }
     
     console.log('=====================================\n');
+    
+    // Выводим данные на панель
+    const panelContent = document.getElementById('stats-panel-content');
+    if (panelContent) {
+        panelContent.innerHTML = formatStatsForPanel(serverStats);
+        openStatsPanel();
+        
+        // Прокручиваем панель вверх
+        const panel = document.getElementById('stats-panel');
+        if (panel) {
+            panel.scrollTop = 0;
+        }
+    }
 }
 
 /**
